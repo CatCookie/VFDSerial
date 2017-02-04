@@ -1,4 +1,4 @@
-""" defindes constants for the display """
+""" defines constants for the display """
 import serial
 
 # control sequences

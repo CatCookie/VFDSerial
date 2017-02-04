@@ -128,6 +128,8 @@ class BA63:
         If wrapping is enabled, the text flows continuously with a space in between the end and the beginning.
         Multiple scrollings on the same line behave like expected.
         """
+        initial_text = initial_text.replace('\r', '')
+        initial_text = initial_text.replace('\n', '')
         def _do():
             i = 0
             while getattr(threading.currentThread(), "do_run", True):
