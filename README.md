@@ -3,7 +3,7 @@ A Framework to control the Siemens BA63 VF Display over the serial port.
 
 ## How to use
 You have to modify the display to connect to the standard RS232 and get power.
-I won' explain this here, you can find very good tutorials on Google or aks me directly.
+I won' explain this here, you can find very good tutorials on Google or ask me directly.
 
 Hook up the display via a serial port (if you don't have one, get an USB-Adapter).
 Import the `vfd` module and go for it.
