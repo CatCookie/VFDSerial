@@ -1,8 +1,8 @@
 import serial
-import sequences
-
-BAUDRATE = 9600
-PARITY = serial.PARITY_ODD
+import constants
+import time
+import threading
+from constants import LINE_LENGTH, LINES
 
 
 class Cursor:
@@ -11,10 +11,10 @@ class Cursor:
         self.line = 1
 
     def set_line(self, line):
-        self.line = 1 if line < 1 else 2 if line > 2 else line
+        self.line = 1 if line < 1 else LINES if line > LINES else line
 
     def set_row(self, row):
-        self.row = 1 if row < 1 else 20 if row > 20 else row
+        self.row = 1 if row < 1 else LINE_LENGTH if row > LINE_LENGTH else row
 
     def add_line(self, lines):
         self.set_line(self.line + lines)
@@ -31,7 +31,7 @@ class BA63:
     Class for handling a Siemens or Wincor/Nixdorf BA63 display via a RS232 serial port.
     """
 
-    def __init__(self, device, baud=BAUDRATE, parity=PARITY):
+    def __init__(self, device, baud=constants.BAUDRATE, parity=constants.PARITY):
         """
         Initializes a Display
 
@@ -40,15 +40,16 @@ class BA63:
         """
         self.serial = serial.Serial(device, baud, parity=parity)
         self.cursor = Cursor()
+        self.threads = []
 
     def clear(self):
         """ Clears the display but the cursor remains where it was before. """
-        self._send(sequences.CLEAR)
+        self._send(constants.CLEAR)
         return self.cursor
 
     def reset(self):
         """ Resets the whole display and the cursor is on the first digit. """
-        self._send(sequences.CLEAR)
+        self._send(constants.CLEAR)
         self.set_position(1, 1)
         return self.cursor
 
@@ -61,7 +62,7 @@ class BA63:
         """ Sets the cursor to the given position. """
         self.cursor.set_row(row)
         self.cursor.set_line(line)
-        self._send(sequences.CURSOR_POSITION % (line, row))
+        self._send(constants.CURSOR_POSITION % (line, row))
         return self.cursor
 
     def newline(self):
@@ -70,13 +71,13 @@ class BA63:
         If the cursor is already in the second line, the line scrolls up.
         """
         self.cursor.add_line(1)
-        self._send(sequences.CURSOR_LINEFEED)
+        self._send(constants.CURSOR_LINEFEED)
         return self.cursor
 
     def carriage_return(self):
         """ Moves the cursor to the start of the line"""
         self.cursor.set_row(1)
-        self._send(sequences.CURSOR_LINE_START)
+        self._send(constants.CURSOR_LINE_START)
         return self.cursor
 
     def write(self, text, line=None, row=None):
@@ -97,20 +98,78 @@ class BA63:
         to_send = ''
         for char in text:
             if char == '\r':
-                self.cursor.add_row(len(to_send))
-                self._send(to_send)
+                self._write_chunk(to_send)
                 to_send = ''
                 self.carriage_return()
             elif char == '\n':
-                self.cursor.add_row(len(to_send))
-                self._send(to_send)
+                self._write_chunk(to_send)
                 to_send = ''
                 self.newline()
             else:
                 to_send += char
 
-        self.cursor.add_row(len(to_send))
-        self._send(to_send)
+        self._write_chunk(to_send)
         return self.cursor
 
+    def _write_chunk(self, chunk):
+        """ Truncates the text which shall be written """
+        if self.cursor.row - 1 + len(chunk) > LINE_LENGTH:
+            self._send(chunk[0:-((len(chunk) + self.cursor.row - 1) - LINE_LENGTH)])
+            self.cursor.set_row(LINE_LENGTH)
+        else:
+            self.cursor.add_row(len(chunk))
+            self._send(chunk)
 
+    def scroll(self, initial_text, line, step_delay=0.25, wrap=False):
+        """
+        Scrolls the given text on the given line.
+
+        With step_delay you can tweak the scroll speed.
+        If wrapping is enabled, the text flows continuously with a space in between the end and the beginning.
+        Multiple scrollings on the same line behave like expected.
+        """
+        def _do():
+            i = 0
+            while getattr(threading.currentThread(), "do_run", True):
+                text = getattr(threading.current_thread(), "text", initial_text)
+                if wrap:
+                    chars = (text + ' ') * ((LINE_LENGTH + len(text)) / (len(text) + 1) + 1)
+                    iteration_length = len(text)
+                else:
+                    chars = ' ' * (LINE_LENGTH - 1) + text + ' ' * (LINE_LENGTH - 1)
+                    iteration_length = LINE_LENGTH + len(text) - 1
+
+                self.write(chars[i:i + LINE_LENGTH], line=line, row=1)
+                time.sleep(step_delay)
+                if not getattr(threading.currentThread(), "do_pause", False):
+                    i = i + 1 if i < iteration_length else 0
+
+        t = threading.Thread(name="Line %s" % line, target=_do)
+        self.threads.append(t)
+        t.start()
+
+
+    def scroll_stop(self, line):
+        """ Stops the scrolling on the given line """
+        thread = [t for t in self.threads if t.name == "Line %s" % line][0]
+        thread.do_run = False
+        self.threads.remove(thread)
+        thread.join()
+        self.cursor.set_row(1)
+        self.cursor.set_line(line)
+        return self.cursor
+
+    def scroll_pause(self, line):
+        """ Pauses the scrolling on the given line """
+        thread = [t for t in self.threads if t.name == "Line %s" % line][0]
+        thread.do_pause = True
+
+    def scroll_continue(self, line):
+        """ Continues the scrolling on the given line """
+        thread = [t for t in self.threads if t.name == "Line %s" % line][0]
+        thread.do_pause = False
+
+    def scroll_update(self, line, text):
+        """ updates the scrolling text on the given line """
+        thread = [t for t in self.threads if t.name == "Line %s" % line][0]
+        thread.text = text

@@ -1,11 +1,14 @@
 import vfd
-import time
+from time import sleep, ctime
 
 d = vfd.BA63("/dev/ttyAMA0")
 
-print d.reset()
-time.sleep(1)
-print d.write("Hallo RasPi!", 1, 5)
+d.reset()
+d.write("Hello RasPi! \r\n", 1, 5)
 
+d.scroll("", line=2, step_delay=0.2, wrap=False)
 
-# print display.write("a\r\nb\rcc\ndd\nee\r\nfff\rg")
+while 1:
+    sleep(0.1)
+    d.scroll_update(2, ctime()[0:-4])
+
