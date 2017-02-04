@@ -1,3 +1,5 @@
+""" defindes the control sequences for the display """
+
 CLEAR = "\x1B\x5B\x32\x4A"
 CURSOR_LINE_START = "\x0D"
 CURSOR_LINEFEED = "\x0A"

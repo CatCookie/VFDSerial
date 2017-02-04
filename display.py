@@ -1,11 +1,11 @@
 import vfd
 import time
 
-display = vfd.BA63("/dev/ttyAMA0")
+d = vfd.BA63("/dev/ttyAMA0")
 
-display.reset()
+print d.reset()
 time.sleep(1)
-display._send("    Hallo RasPi!")
+print d.write("Hallo RasPi!", 1, 5)
 
-display.set_position(2, 3)
-display._send("ABC")
+
+# print display.write("a\r\nb\rcc\ndd\nee\r\nfff\rg")
